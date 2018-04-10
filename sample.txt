@@ -1,0 +1,103 @@
+[mloo3@networklab1 ~]$ python3 ringo.py flag 49100 networklab2.cc.gatech.edu 49101 3
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+
+Did not receive a response. Retrying Query.....
+Sending packet:  PEER[('130.207.107.12', 49100), ('130.207.107.13', 49101)]
+Data Received:  ack
+
+Recv by  ('130.207.107.14', 50902)
+Data Recv PEER[('130.207.107.14', 49102), ('130.207.107.12', 49100)]
+PEER DISCOVERY FINISHED, SORTED KNOWNLIST:
+[('130.207.107.12', 49100), ('130.207.107.13', 49101), ('130.207.107.14', 49102)]
+
+Calculating RTT
+Sending packet:  RTT_CALC
+Recv by  ('130.207.107.14', 38267)
+Data Recv RTT_CALC
+
+Recv by  ('130.207.107.13', 37468)
+Data Recv RTT_CALC
+
+Data Received:  ack
+
+Sending packet:  RTT_CALC
+Data Received:  ack
+
+Recv by  ('130.207.107.14', 38267)
+Data Recv RTT_DICT{('130.207.107.14', 49102): [0.05124, 0.05134, 0]}
+appending {('130.207.107.14', 49102): [0.05124, 0.05134, 0]} to rtt_matrix
+
+
+Recv by  ('130.207.107.13', 37468)
+Data Recv RTT_DICT{('130.207.107.13', 49101): [0.06254, 0, 0.08265]}
+appending {('130.207.107.13', 49101): [0.06254, 0, 0.08265]} to rtt_matrix
+
+
+@@@@@@@@@@@@@@@@@@@@@@@@@
+Sending packet:  RTT_DICT{('130.207.107.12', 49100): [0, 0.058, 0.05963]}
+Data Received:  ack
+
+Sending packet:  RTT_DICT{('130.207.107.12', 49100): [0, 0.058, 0.05963]}
+Data Received:  ack
+
+Recv by  ('130.207.107.12', 35003)
+Data Recv DONE
+matrix in list form
+[[0.0, 0.06027, 0.05543], [0.06027, 0.0, 0.06699], [0.05543, 0.06699, 0.0]]
+
+Ringo Command: show matrix
+invalid command
+Ringo Command: show-matrix
+
+MATRIX IN LIST FORM:
+[[0.0, 0.06027, 0.05543], [0.06027, 0.0, 0.06699], [0.05543, 0.06699, 0.0]]
+Ringo Command: show-ring
+
+OPTIMAL RING:
+optimal ring: {('130.207.107.12', 49100),('130.207.107.13', 49101),('130.207.107.14', 49102),('130.207.107.12', 49100),}
+Ringo Command: 
