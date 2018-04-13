@@ -18,7 +18,6 @@ N = int(sys.argv[5])
 knownlist_lock = threading.Lock()
 newlist_lock = threading.Lock()
 rtt_dict_lock = threading.Lock()
-rtt_matrix_lock = threading.Lock()
 
 knownlist = []
 knownlist.append((LOCALHOSTNAME,LOCALPORT))
@@ -145,9 +144,7 @@ def rrt_send():
         rtt_dict[(LOCALHOSTNAME,LOCALPORT)][i] = totaltime
         rtt_dict_lock.release()
     time.sleep(2)
-    rtt_matrix_lock.acquire()
     rtt_matrix.append(rtt_dict)
-    rtt_matrix_lock.release()
     time.sleep(2)
     print("@@@@@@@@@@@@@@@@@@@@@@@@@")
     for i, (host, port) in enumerate(knownlist):
@@ -186,12 +183,10 @@ def rtt_recv():
         if data =='RTT_CALC':
             ss.sendto('ack'.encode(), addr)
         elif data[0:8] == 'RTT_DICT':
-            rtt_matrix_lock.acquire()
             data = ast.literal_eval(data[8:])
             print("appending", data, "to rtt_matrix\n")
             rtt_matrix.append(data)
             ss.sendto('ack'.encode(), addr)
-            rtt_matrix_lock.release()
         elif data == 'DONE':
             break
 
@@ -267,17 +262,18 @@ def rtt_calc():
     print(rtt_matrix_list)
     print("")
 
+def offline_reset():
+    knownlist = []
+    newlist = []
+    rtt_dict = {}
+    rtt_matrix = []
+    rtt_matrix_list = []
+    g = {}
+    p = []
+    optimal_ring = []
+
 if __name__ == '__main__':
-    global knownlist, newlist, rtt_dict, rtt_matrix, rtt_matrix_list
 
-
-# rtt_dict = {(LOCALHOSTNAME, LOCALPORT) : [0 for i in range(N)]}
-# rtt_matrix = []
-# rtt_matrix_list = []
-
-# g = {}
-# p = []
-optimal_ring = []
     # PEER DISCOVERY
     peer_discovery()
     print("PEER DISCOVERY FINISHED, SORTED KNOWNLIST:")
@@ -294,8 +290,17 @@ optimal_ring = []
     while True:
         com = input('Ringo Command: ').split()
         if com[0] == 'offline':
-            time.sleep(com[1])
-
+            time.sleep(int(com[1]))
+            print("!@)(#!)(@*#")
+            print(knownlist)
+            print(newlist)
+            print(rtt_dict)
+            print(rtt_matrix)
+            print(rtt_matrix_list)
+            print(g)
+            print(p)
+            print(optimal_ring)
+            print("!@)(#!)(@*#")
 
         elif com[0] == 'send':
           #   TODO
@@ -318,7 +323,7 @@ optimal_ring = []
             # PROB NEED TO CHANGE
             exit(0)
         else:
-            print('invalid command')
+            print('invalid command\n')
             continue
 
 
