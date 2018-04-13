@@ -286,9 +286,10 @@ if __name__ == '__main__':
     rtt_calc()
 
     keep_alive_status = [(True,time.time())] * N
-
+    # 1 min = 60000ms
     while True:
         com = input('Ringo Command: ').split()
+        
         if com[0] == 'offline':
             time.sleep(int(com[1]))
             print("ringo back online!")
