@@ -47,7 +47,7 @@ def peer_discovery_send(sendname, sendport):
         cs.setblocking(0)
 
         while True:
-            ready = select.select([cs],[],[],0.5)
+            ready = select.select([cs],[],[],1)
             if ready[0]:
                 data = cs.recv(1024)
                 break
@@ -144,7 +144,9 @@ def rrt_send():
         rtt_dict[(LOCALHOSTNAME,LOCALPORT)][i] = totaltime
         rtt_dict_lock.release()
     time.sleep(2)
+    rtt_dict_lock.acquire()
     rtt_matrix.append(rtt_dict)
+    rtt_dict_lock.release()
     time.sleep(2)
     print("@@@@@@@@@@@@@@@@@@@@@@@@@")
     for i, (host, port) in enumerate(knownlist):
@@ -263,14 +265,12 @@ def rtt_calc():
     print("")
 
 def offline_reset():
+    global knownlist, newlist, rtt_dict, rtt_matrix, rtt_matrix_list
     knownlist = []
     newlist = []
     rtt_dict = {}
     rtt_matrix = []
     rtt_matrix_list = []
-    g = {}
-    p = []
-    optimal_ring = []
 
 if __name__ == '__main__':
 
@@ -285,22 +285,15 @@ if __name__ == '__main__':
     #RRT CALCUATION
     rtt_calc()
 
-    keep_alive_status = [True] * N
+    keep_alive_status = [(True,time.time())] * N
 
     while True:
         com = input('Ringo Command: ').split()
         if com[0] == 'offline':
             time.sleep(int(com[1]))
-            print("!@)(#!)(@*#")
-            print(knownlist)
-            print(newlist)
-            print(rtt_dict)
-            print(rtt_matrix)
-            print(rtt_matrix_list)
-            print(g)
-            print(p)
-            print(optimal_ring)
-            print("!@)(#!)(@*#")
+            print("ringo back online!")
+            # offline_reset()
+            # print("lost all information. waiting to get it back")
 
         elif com[0] == 'send':
           #   TODO
