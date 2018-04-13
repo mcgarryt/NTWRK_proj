@@ -268,7 +268,16 @@ def rtt_calc():
     print("")
 
 if __name__ == '__main__':
+    global knownlist, newlist, rtt_dict, rtt_matrix, rtt_matrix_list
 
+
+# rtt_dict = {(LOCALHOSTNAME, LOCALPORT) : [0 for i in range(N)]}
+# rtt_matrix = []
+# rtt_matrix_list = []
+
+# g = {}
+# p = []
+optimal_ring = []
     # PEER DISCOVERY
     peer_discovery()
     print("PEER DISCOVERY FINISHED, SORTED KNOWNLIST:")
