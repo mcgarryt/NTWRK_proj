@@ -34,6 +34,8 @@ g = {}
 p = []
 optimal_ring = []
 
+PEER_DISC_FLAG = 0
+
 def peer_discovery_send(sendname, sendport):
     if sendname and sendport:
         cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -108,6 +110,8 @@ def peer_discovery():
         newlist = list(set(newlist).difference(set(templist)))
         # time.sleep(1)
 
+    PEER_DISC_FLAG = 1;
+
 
 
 def rrt_send():
@@ -176,7 +180,7 @@ def rrt_send():
 def rtt_recv():
     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ss.bind(('', LOCALPORT))
-    while True:
+    while True and PEER_DISC_FLAG == 1:
         data, addr = ss.recvfrom(1024)
         #newlist = []
         print('Recv by ', addr)
@@ -191,6 +195,13 @@ def rtt_recv():
             ss.sendto('ack'.encode(), addr)
         elif data == 'DONE':
             break
+        elif data[0:4] == 'PEER':
+            # while len(knownlist) != N:
+            # templist = newlist[:]
+            # for host,port in templist:
+            #     call_peer_threads(host, port)
+            # newlist = list(set(newlist).difference(set(templist)))
+            PEER_DISC_FLAG = 0;
 
         print("")
     
