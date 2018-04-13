@@ -18,6 +18,7 @@ N = int(sys.argv[5])
 knownlist_lock = threading.Lock()
 newlist_lock = threading.Lock()
 rtt_dict_lock = threading.Lock()
+rtt_matrix_lock = threading.Lock()
 
 knownlist = []
 knownlist.append((LOCALHOSTNAME,LOCALPORT))
@@ -144,7 +145,9 @@ def rrt_send():
         rtt_dict[(LOCALHOSTNAME,LOCALPORT)][i] = totaltime
         rtt_dict_lock.release()
     time.sleep(2)
+    rtt_matrix_lock.acquire()
     rtt_matrix.append(rtt_dict)
+    rtt_matrix_lock.release()
     time.sleep(2)
     print("@@@@@@@@@@@@@@@@@@@@@@@@@")
     for i, (host, port) in enumerate(knownlist):
@@ -183,10 +186,12 @@ def rtt_recv():
         if data =='RTT_CALC':
             ss.sendto('ack'.encode(), addr)
         elif data[0:8] == 'RTT_DICT':
+            rtt_matrix_lock.acquire()
             data = ast.literal_eval(data[8:])
             print("appending", data, "to rtt_matrix\n")
             rtt_matrix.append(data)
             ss.sendto('ack'.encode(), addr)
+            rtt_matrix_lock.release()
         elif data == 'DONE':
             break
 
@@ -247,16 +252,8 @@ def get_minimum(k, a):
 
     return g[k, a]
 
-if __name__ == '__main__':
-    # PEER DISCOVERY
-    peer_discovery()
-    print("PEER DISCOVERY FINISHED, SORTED KNOWNLIST:")
-    knownlist.sort(key=lambda x: x[0])
-    print(knownlist)
-    time.sleep(3)
-    print("")
-
-    #RRT CALCUATION
+def rtt_calc():
+    global rtt_matrix_list
     print("Calculating RTT")
     rtt()
     # converting to list of dictinoary to list of list
@@ -270,11 +267,27 @@ if __name__ == '__main__':
     print(rtt_matrix_list)
     print("")
 
+if __name__ == '__main__':
+
+    # PEER DISCOVERY
+    peer_discovery()
+    print("PEER DISCOVERY FINISHED, SORTED KNOWNLIST:")
+    knownlist.sort(key=lambda x: x[0])
+    print(knownlist)
+    time.sleep(3)
+    print("")
+
+    #RRT CALCUATION
+    rtt_calc()
+
+    keep_alive_status = [True] * N
+
     while True:
         com = input('Ringo Command: ').split()
         if com[0] == 'offline':
-          #   TODO
-            exit(0)
+            time.sleep(com[1])
+
+
         elif com[0] == 'send':
           #   TODO
           # send(FLAG, LOCALPORT, POCNAME, POCPORT)
