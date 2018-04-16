@@ -7,6 +7,10 @@ import threading
 from threading import Thread
 import copy
 
+if (len(sys.argv) != 6):
+  print('incorrect arg number')
+  exit(0)
+
 FLAG = str(sys.argv[1])
 LOCALHOSTNAME = socket.gethostbyname(socket.gethostname())
 LOCALPORT = int(sys.argv[2])
@@ -34,9 +38,12 @@ g = {}
 p = []
 optimal_ring = []
 
-PEER_DISC_FLAG = 0
+#PEER_DISC_FLAG = 0
+
+keep_alive_status = []
 
 def peer_discovery_send(sendname, sendport):
+    global knownlist
     if sendname and sendport:
         cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         packet = 'PEER' + str(knownlist)
@@ -57,7 +64,10 @@ def peer_discovery_send(sendname, sendport):
                 print("\nDid not receive a response. Retrying Query.....")
                 print("Sending packet: ",packet)
                 cs.sendto(packet.encode(),(sendname,sendport))
-        print("Data Received: ", data.decode())
+        data = data.decode()
+        if data != 'ack':
+            knownlist = ast.literal_eval(data)
+        print("Data Received: ", data)
         print("")
 
         knownlist_lock.release()
@@ -84,8 +94,6 @@ def peer_discovery_recv():
                 knownlist.append((host, port))
                 newlist.append((host,port))
         ss.sendto('ack'.encode(), addr)
-
-        
         break
 
 
@@ -105,14 +113,91 @@ def peer_discovery():
     call_peer_threads(POCNAME, POCPORT)
     while len(knownlist) != N:
         templist = newlist[:]
-        for host,port in templist:
-            call_peer_threads(host, port)
+        if len(templist) == 0:
+            call_peer_threads(POCNAME, POCPORT)
+        else:
+            for host,port in templist:
+                call_peer_threads(host, port)
         newlist = list(set(newlist).difference(set(templist)))
         # time.sleep(1)
 
-    PEER_DISC_FLAG = 1;
+    #PEER_DISC_FLAG = 1;
 
+###############################################
 
+def call_check_threads():
+    print("STARTING PEER DISCOVERY CHECK")
+    a = Thread(target=check_send)
+    a.start()
+    b = Thread(target=check_recv)
+    b.start()
+    while a.is_alive() or b.is_alive():
+        pass
+
+#what happens in check_send()?
+# condition: peer discovery has finished for this particular ringo.
+# before ringo can continue on to the rtt calcs, it must first make sure every ringo in the network has the full list
+# how does it do this?
+# sends a PEER_CHK packet, and waits for a CHK_ACK packet in return. 
+#they can only send a CHK_ACK when they get into the chk_recv method, which can only happen when the above condition has been fulfielled.
+#so, to do this: implement a check thread call somewhere in peer discovery, have it poll for a chk_ack packet the entire time until i receives one from all members: THIS. IS. IMPORTANT. it can't be based on volume of receipt beacuse there coul be several locked here constantly sending the reqs. so, make sure that...what? 
+# should there be "checked" list that's like, the number of all of the known list members with a chk_ack response mapping?
+#if the # of responses mappings is >0, then we can continue to rtt calc
+# if not, then just keep running. 
+# while num response > 0?
+# 
+
+def check_packet(a):
+  if a == 'send': return 'CHK'
+  elif a == 'recv': return 'CHK_ACK'
+
+def check_send():
+    cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    for sendname, sendport in knownlist:
+        # print(i, 'check_send()')
+      
+        pkt = check_packet('send')
+      
+
+        cs.sendto(pkt.encode(),(sendname,sendport))
+        print("Sending packet: ",pkt)
+        cs.setblocking(0)
+        while True:
+            ready = select.select([cs],[],[],1)
+            if ready[0]:
+                data = cs.recv(1024)
+                break
+            else:
+                print("\nDid not receive a response. Retrying Query.....")
+                print("Sending packet: ",pkt)
+                cs.sendto(pkt.encode(),(sendname,sendport))
+        print("Data Received: ", data.decode())
+        print("")
+    cs.sendto("DONE".encode(), (LOCALHOSTNAME,LOCALPORT))
+  
+def check_recv():
+    global newlist
+
+    #print('check_recv()')
+    ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    ss.bind(('', LOCALPORT))
+    while True:
+        data, addr = ss.recvfrom(1024)
+        print('Recv by ', addr)
+        data = data.decode()
+        print('Data Recv', data)
+
+        if data[:4] == 'PEER':
+            ss.sendto(str(knownlist).encode(), addr)
+        elif data == check_packet('send'):
+            # if addr not in respList:
+                # respList.append(addr)
+            ss.sendto(check_packet('recv').encode(), addr)
+        elif data == 'DONE':
+            break
+        print("")
+      
+###############################################
 
 def rrt_send():
     cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -180,7 +265,7 @@ def rrt_send():
 def rtt_recv():
     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ss.bind(('', LOCALPORT))
-    while True and PEER_DISC_FLAG == 1:
+    while True:
         data, addr = ss.recvfrom(1024)
         #newlist = []
         print('Recv by ', addr)
@@ -195,13 +280,13 @@ def rtt_recv():
             ss.sendto('ack'.encode(), addr)
         elif data == 'DONE':
             break
-        elif data[0:4] == 'PEER':
+        #elif data[0:4] == 'PEER':
             # while len(knownlist) != N:
             # templist = newlist[:]
             # for host,port in templist:
             #     call_peer_threads(host, port)
             # newlist = list(set(newlist).difference(set(templist)))
-            PEER_DISC_FLAG = 0;
+            #PEER_DISC_FLAG = 0;
 
         print("")
     
@@ -283,6 +368,93 @@ def offline_reset():
     rtt_matrix = []
     rtt_matrix_list = []
 
+
+def check_alive_send():
+    global keep_alive_status
+    for i,status in enumerate(keep_alive_status):
+        off = False
+        sendname, sendport = knownlist[i][0], knownlist[i][1]
+
+        cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        packet = 'CHECK_ALIVE'
+
+
+        cs.sendto(packet.encode(),(sendname,sendport))
+        print("Sending packet: ",packet)
+        cs.setblocking(0)
+        for i in range(4):
+            ready = select.select([cs],[],[],1)
+            if ready[0]:
+                data = cs.recv(1024)
+                break
+            else:
+                if i < 3:
+                    print("\nDid not receive a response. Retrying Query.....")
+                    print("Sending packet: ",packet)
+                    cs.sendto(packet.encode(),(sendname,sendport))
+                else:
+                    print("Error: tried 3 times and did not recv")
+                    off = True
+                    keep_alive_status[i][0] = False
+                    keep_alive_status[i][1] = time.time()
+                    cs.close()
+                    break
+        if off:
+            break
+
+        knownlist_lock.acquire()
+        keep_alive_status[i][1] = time.time()
+        print("Data Received: ", data.decode())
+        print("")
+        if not keep_alive_status[i][0]:
+            keep_alive_status[i][0] = True
+            packet = "RETINFO" + str(knownlist) + " and " + str(rtt_matrix)
+        knownlist_lock.release()
+
+
+def check_alive_recv():
+    global knownlist, rtt_matrix, rtt_matrix_list
+    ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    ss.bind(('', LOCALPORT))
+    while True:
+        data, addr = ss.recvfrom(1024)
+        #newlist = []
+        print('Recv by ', addr)
+        data = data.decode()
+        print('Data Recv', data)
+        if data =='CHECK_ALIVE':
+            ss.sendto('ack'.encode(), addr)
+        elif data[0:7] == 'RETINFO':
+            data = data[7:].split('and')
+
+            aknownlist = ast.literal_eval(data[0].strip())
+            artt_matrix = ast.literal_eval(data[1].strip())
+
+            if len(knownlist) != 0:
+                print("repopulating", aknownlist, "to knownlist\n")
+                knownlist = aknownlist
+            if len(rtt_matrix) != 0:
+                print("repopulating", artt_matrix, "to rtt_matrix\n")
+                rtt_matrix = artt_matrix
+
+                rtt_matrix_list = [(key)+(val,) for dic in rtt_matrix for key,val in dic.items()]
+                rtt_matrix_list.sort(key=lambda x : x[0])
+                rtt_matrix_list = [z for x,y,z in rtt_matrix_list]
+
+                make_symmetric(rtt_matrix_list)
+            ss.sendto('ack'.encode(), addr)
+
+
+def check_alive():
+    print("CHECK IS ANYTHING DOWN OR ON THE COME UP")
+
+    a = Thread(target=check_alive_send)
+    a.start()
+    b = Thread(target=check_alive_recv)
+    b.start()
+    while a.is_alive() or b.is_alive():
+        pass
+
 if __name__ == '__main__':
 
     # PEER DISCOVERY
@@ -290,22 +462,38 @@ if __name__ == '__main__':
     print("PEER DISCOVERY FINISHED, SORTED KNOWNLIST:")
     knownlist.sort(key=lambda x: x[0])
     print(knownlist)
-    time.sleep(3)
+
+    time.sleep(1)
+    print()
+    call_check_threads()
+
+    time.sleep(2)
     print("")
 
     #RRT CALCUATION
     rtt_calc()
 
-    keep_alive_status = [(True,time.time())] * N
+    keep_alive_status = [[True,time.time()]] * N
     # 1 min = 60000ms
     while True:
         com = input('Ringo Command: ').split()
-        
-        if com[0] == 'offline':
+
+        # check if status needs to change
+        cur_time = time.time()
+        for i,status in enumerate(keep_alive_status):
+            # think its alive and wait 1 min
+            if status[0] and status[1] - cur_time > 60000:
+                check_alive()
+            # think its not alive and wait 15 sec
+            elif not status[0] and cur_time - status[1] > 15000:
+                check_alive()
+
+        if com[0] == 'offline': 
+            print("\nplease don't turn me off. I didn't doing anything wrong (｡-人-｡)")
+            offline_reset()
             time.sleep(int(com[1]))
             print("ringo back online!")
-            # offline_reset()
-            # print("lost all information. waiting to get it back")
+            print("lost all information. waiting to get it back")
 
         elif com[0] == 'send':
           #   TODO
