@@ -210,12 +210,21 @@ def sendfile(filename):
     tosend = open(filename, "rb")
     seqNum = 0
     sendbuf = tosend.read(1000)
+    cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    cs.bind(('', LOCALPORT))
+    # packet format: 'data' + seqNum, which should be = tosend.tell() + the data as the last 1000 bytes
+    # therefore: 8 byte 'data' + 14 byte seqNum + (up to) 1000 byte data + 2 bytes of whitespace
+    packet = 'data' + ' ' + str((1+seqNum) * 1000) + ' ' + str(sendbuf) 
+
+#
+def recFileAck():
+    seqNums = []
     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ss.bind(('', LOCALPORT))
-    packet = 'data' + str(seqNum * 1000) + str(sendbuf) 
-
-def recFileAck():
-    #data = recv(1024).decode()
+    while(true):
+        (sock, addr) = ss.accept()
+        data = recv(1024)
+        data = data.decode()
 
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~FILE SEND END~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
