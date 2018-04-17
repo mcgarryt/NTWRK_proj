@@ -110,7 +110,7 @@ def peer_discovery():
         newlist = list(set(newlist).difference(set(templist)))
         # time.sleep(1)
 
-    PEER_DISC_FLAG = 1;
+    PEER_DISC_FLAG = 1
 
 
 
