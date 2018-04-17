@@ -255,7 +255,7 @@ def check_recv():
 #           break
 #       else:
 #           print("\nDid not receive a response. Retrying Query.....")
-#           print("Sending packet: ",pkt)
+#           print("Sending packet: ",packet)
 #           cs.sendto(packet.encode(),(sendname,sendport))
 
 # #seqNums keeps track of the seqNums we've acquired: if we receive an already-received seqnum,
@@ -263,6 +263,7 @@ def check_recv():
 # #we handle churn in other ways elsewhere, but some redundancy is good, esp wrt this
 # seqNums = []
 # totalData = ''
+# fname = ""
 # def recFileAck():
 #    ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #    ss.bind(('', LOCALPORT))
@@ -272,14 +273,18 @@ def check_recv():
 #        print('received data from: ', addr)
 #        res = data.decode().split()
 #        print('data is as follows: ', str(res))
-#        seqNums.append(res[1])
+#        if res[1] is not in seqNums:
+#           seqNums.append(res[1])
 #        ackPack = 'ack' + res[1]
 #        sendto(ackPack.encode(), addr)
 #        if FLAG is 'r' or FLAG is 'R':
-#           if len(res) > 
-#           open(
-
-#           write to file
+#           if len(res) > 3:
+# this condition signifies that it's the first packet
+# also we need to append the filename to return properly, so:
+#              fname = open(res[2], "wb")
+#  write to file
+#           fname.write(res[len(res) - 1])
+#           totalData += res[len(res) - 1]
 #        else if FLAG is 'f' or FLAG is 'F':
             # keep forwarding it down the line
 
@@ -444,11 +449,16 @@ def rtt_calc():
     print("Calculating RTT")
     rtt()
     # converting to list of dictinoary to list of list
+    print("@@@@")
+    print(rtt_matrix)
     rtt_matrix_list = [(key)+(val,) for dic in rtt_matrix for key,val in dic.items()]
     rtt_matrix_list.sort(key=lambda x : x[0])
     rtt_matrix_list = [z for x,y,z in rtt_matrix_list]
     print(rtt_matrix_list)
+    print(len(rtt_matrix_list))
+
     make_symmetric(rtt_matrix_list)
+    print("@@@@")
 
     print("matrix in list form")
     print(rtt_matrix_list)
