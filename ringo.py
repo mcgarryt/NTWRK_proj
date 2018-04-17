@@ -125,7 +125,7 @@ def peer_discovery():
 
     #PEER_DISC_FLAG = 1;
 
-
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PEER DISC CHECKS BEGIN~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 def call_check_threads():
     print("STARTING PEER DISCOVERY CHECK")
     a = Thread(target=check_send)
@@ -198,7 +198,30 @@ def check_recv():
             break
         print("")
       
-###############################################
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PEER DISC CHECKS END~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~FILE SEND BEGIN~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+#This command will be executed only at the Sender. It triggers the creation of a new connection 
+#with  the  Receiver  (does  not  need  to  be  specified  because  there  is  only  one  Receiver  at  the 
+#network). The name of the file to be transferred is 
+#filename and it should exist at the local directory. 
+#Example: send foo.jpg
+def sendfile(filename):
+    tosend = open(filename, "rb")
+    seqNum = 0
+    sendbuf = tosend.read(1000)
+    ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    ss.bind(('', LOCALPORT))
+    packet = 'data' + str(seqNum * 1000) + str(sendbuf) 
+
+def recFileAck():
+    #data = recv(1024).decode()
+
+
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~FILE SEND END~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
+
+
+
 
 def rrt_send():
     cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -500,6 +523,11 @@ if __name__ == '__main__':
         elif com[0] == 'send':
           #   TODO
           # send(FLAG, LOCALPORT, POCNAME, POCPORT)
+            filename = com[1]
+            if FLAG is not 'S' or FLAG is not 's':
+                print("This ringo is not a sender: cannot send %s", filename)
+                break
+            sendfile(filename)
             exit(0)
         elif com[0] == 'show-matrix':
             print("\nMATRIX IN LIST FORM:")
