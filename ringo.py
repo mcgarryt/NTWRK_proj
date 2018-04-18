@@ -18,7 +18,9 @@ POCNAME = socket.gethostbyname(str(sys.argv[3]))
 POCPORT = int(sys.argv[4])
 N = int(sys.argv[5])
 
-
+receiver = ("0.0.0.0", -1)
+if FLAG.lower() == 'r':
+    receiver = (LOCALHOSTNAME, LOCALPORT)
 knownlist_lock = threading.Lock()
 newlist_lock = threading.Lock()
 rtt_dict_lock = threading.Lock()
@@ -58,7 +60,7 @@ def peer_discovery_send():
 
             cs.sendto(packet.encode(),(POCNAME,POCPORT))
             print("Sending packet: ",packet)
-            cs.setblocking(0)
+            # cs.setblocking(0)
 
             while True:
                 ready = select.select([cs],[],[],1)
@@ -87,7 +89,7 @@ def peer_discovery_send():
 
                 cs.sendto(packet.encode(),(host,port))
                 print("Sending packet: ",packet)
-                cs.setblocking(0)
+                # cs.setblocking(0)
 
                 while True:
                     ready = select.select([cs],[],[],1)
@@ -122,13 +124,16 @@ def peer_discovery_recv():
         print('Data Recv', data)
         if data == 'DONE':
             break
-        data = ast.literal_eval(data[4:])
-        for (host, port) in data:
-            # print str(host, port)
-            if (host, port) not in knownlist:
-                knownlist.append((host, port))
-                newlist.append((host,port))
-        ss.sendto('ack'.encode(), addr)
+        elif data[0:4] == 'PEER':
+            data = ast.literal_eval(data[4:])
+            for (host, port) in data:
+                # print str(host, port)
+                if (host, port) not in knownlist:
+                    knownlist.append((host, port))
+                    newlist.append((host,port))
+            ss.sendto('ack'.encode(), addr)
+        else:
+            print(data)
 
 
 def call_peer_threads():
@@ -173,17 +178,18 @@ def check_packet(a):
   elif a == 'recv': return 'CHK_ACK'
 
 def check_send():
+    global receiver
+
     cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     for sendname, sendport in knownlist:
         if sendname != LOCALHOSTNAME:
             # print(i, 'check_send()')
           
-            pkt = check_packet('send')
-          
+            pkt = check_packet('send')+ str(receiver)
 
             cs.sendto(pkt.encode(),(sendname,sendport))
             print("Sending packet: ",pkt)
-            cs.setblocking(0)
+            # cs.setblocking(0)
             while True:
                 ready = select.select([cs],[],[],1)
                 if ready[0]:
@@ -198,7 +204,7 @@ def check_send():
     cs.sendto("DONE".encode(), (LOCALHOSTNAME,LOCALPORT))
   
 def check_recv():
-    global newlist
+    global newlist, receiver
 
     #print('check_recv()')
     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -207,16 +213,19 @@ def check_recv():
         data, addr = ss.recvfrom(1024)
         print('Recv by ', addr)
         data = data.decode()
-        print('Data Recv', data)
+        print('Data Recv', str(data))
+
+        if data == 'DONE':
+            break
 
         if data[:4] == 'PEER':
             ss.sendto(str(knownlist).encode(), addr)
-        elif data == check_packet('send'):
-            # if addr not in respList:
-                # respList.append(addr)
-            ss.sendto(check_packet('recv').encode(), addr)
-        elif data == 'DONE':
-            break
+        elif data[:3] == check_packet('send'):
+            packet = check_packet('recv')
+            ss.sendto(packet.encode(), addr)
+            data = ast.literal_eval(data[3:])
+            if data[0] != "0.0.0.0" and data[1] != -1:
+                receiver = (data[0],data[1])
         print("")
       
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~PEER DISC CHECKS END~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
@@ -227,66 +236,85 @@ def check_recv():
 #network). The name of the file to be transferred is 
 #filename and it should exist at the local directory. 
 #Example: send foo.jpg
-# seqNum = 0
-# def sendfile(filename):
-#     tosend = open(filename, "rb")
-#     seqNum = 0
-#     sendbuf = tosend.read(1000)
-#     cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#     cs.bind(('', LOCALPORT))
-#     # packet format: 'data' + seqNum, which should be = tosend.tell() + the data as the last 1000 bytes
-#     # therefore: 8 byte 'data' + 14 byte seqNum + (up to) 1000 byte data + 2 bytes of whitespace
+def sendfile(filename):
+    tosend = open(filename, "r")
+    seqNum = 0
+    sendbuf = tosend.read(1000)
+    cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # packet format: 'data' + seqNum, which should be = tosend.tell() + the data as the last 1000 bytes
+    # therefore: 8 byte 'data' + 14 byte seqNum + (up to) 1000 byte data + 2 bytes of whitespace
 
-#     if seqNum is 0:
-#       packet = 'data' + ' ' + str((1=seqNum) * 1000) + ' ' + filename + ' ' str(sendbuf)
-#     else:
-#        packet = 'data' + ' ' + str((1+seqNum) * 1000) + ' ' + str(sendbuf)
+    #  cases: first packet, last packet, middle packet, first packet = last packet (file < 1kb)
+    while not tosend.closed:
+        if len(sendbuf) < 1000:
+            packet = 'DONE' + '/' + str((1+seqNum) * 1000) + '/' + filename + '/' + str(sendbuf)
+            tosend.close()
+        elif seqNum == 0:
+            packet = 'data' + '/' + str((1+seqNum) * 1000) + '/' + filename + '/' + str(sendbuf)
+        else:
+            packet = 'data' + '/' + str((1+seqNum) * 1000) + '/' + str(sendbuf)
+        seqNum += 1
+        nextIndex = findShortestPath()
 
-#     bestRoute = findShortestPath()
+        (destaddr, destport) = knownlist[nextIndex]
+        cs.sendto(packet.encode(), (destaddr, destport))
+        print("Sending packet: ",packet)
+        if packet[:4] == 'DONE':
+            cs.sendto(packet.encode(), (destaddr, destport))
+            break
 
-#     sendto(packet.encode(), (sendname, sendport))
-
-#     print("Sending packet: ",pkt)
-#     cs.setblocking(0)
-#     while True:
-#       ready = select.select([cs],[],[],1)
-#       if ready[0]:
-#           data = cs.recv(1024)
-#           break
-#       else:
-#           print("\nDid not receive a response. Retrying Query.....")
-#           print("Sending packet: ",packet)
-#           cs.sendto(packet.encode(),(sendname,sendport))
-
+        while(True):
+            ready = select.select([cs],[],[],3)
+            if ready[0]:
+                data = cs.recv(1024)
+                break
+            else:
+                print("\nDid not receive a response. Retrying Query.....")
+                print("Sending packet: ")
+                # print("Sending packet: ",packet)
+                print(packet)
+                cs.sendto(packet.encode(),knownlist[nextIndex])
+        sendbuf = tosend.read(1000)
+    cs.close()
+          
 # #seqNums keeps track of the seqNums we've acquired: if we receive an already-received seqnum,
 # #we know that it got lost mid-transmission, so we have to resend the ack
 # #we handle churn in other ways elsewhere, but some redundancy is good, esp wrt this
-# seqNums = []
-# totalData = ''
-# fname = ""
+
 # def recFileAck():
-#    ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-#    ss.bind(('', LOCALPORT))
-#    ss.listen(10)
-#    while(true):   
-#        (data, addr) = ss.recvfrom(1024)
-#        print('received data from: ', addr)
-#        res = data.decode().split()
-#        print('data is as follows: ', str(res))
-#        if res[1] is not in seqNums:
-#           seqNums.append(res[1])
-#        ackPack = 'ack' + res[1]
-#        sendto(ackPack.encode(), addr)
-#        if FLAG is 'r' or FLAG is 'R':
-#           if len(res) > 3:
-# this condition signifies that it's the first packet
-# also we need to append the filename to return properly, so:
-#              fname = open(res[2], "wb")
-#  write to file
-#           fname.write(res[len(res) - 1])
-#           totalData += res[len(res) - 1]
-#        else if FLAG is 'f' or FLAG is 'F':
-            # keep forwarding it down the line
+#     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+#     ss.bind(('', 65533))
+#     seqNums = []
+#     fname = ""
+#         while(True):   
+#             (data, addr) = ss.recvfrom(1024)
+#             print('received data from: ', addr)
+#             data = data.decode()
+#             if data[:4] != 'DUNE' or 'data': break
+#             res = data.split('/')
+#             print('data is as follows: ', str(res))
+#             if res[1] not in seqNums:
+#                 seqNums.append(res[1])
+#                 if len(res) == 4:
+#                     if res[0] == 'DONE' and fname == "":
+#                         fname = open(res[2], "wb")
+#                         fname.write(res[3])
+#                         break
+#                     elif fname == "":
+#                         fname = open(res[2], "wb")
+#                         fname.write(res[3])
+#                     elif res[0] == 'DUNE':
+#                         fname.write(res[3])
+#                         fname.close()
+#                         break
+#                 else:
+#                       fname.write(res[2])
+#             print("@@@@@@@@@@@@")
+#             ackPack = 'ack' + res[1]
+#             sendto(ackPack.encode(), addr)
+
+#         if FLAG.lower() == 'f':
+#             sendfile(fname.name)
 
 
 #optimal ring has the index 
@@ -295,7 +323,29 @@ def check_recv():
 #access it by index - 1
 #rtt matrix is a list with keys being IP and the value being the RTT vector to reach
 #rtt is symmetric
-#def findShortestPath():
+# (1,2) (2,3) (3,4)
+def findShortestPath():
+    ix = knownlist.index((LOCALHOSTNAME,LOCALPORT))
+    # rotate_ring = optimal_ring[-1][ix:] + optimal_ring[:-1][:ix]
+    paths = []
+    for i in range(len(optimal_ring) - 1):
+        paths.append((optimal_ring[(i + ix)%len(knownlist)] - 1, optimal_ring[(i + ix + 1)%len(knownlist)] - 1))
+    total_right = 0
+    for path in paths:
+        total_right += rtt_matrix_list[path[0]][path[1]]
+        if knownlist[path[1]] == receiver:
+            break
+    total_left = 0
+    for path in paths[::-1]:
+        total_left += rtt_matrix_list[path[0]][path[1]]
+        if knownlist[path[0]] == receiver:
+            break
+
+    if total_left < total_right:
+        return (paths[0][0] - 1) % len(knownlist)
+    else:
+        return (paths[0][0] + 1) % len(knownlist)
+
 
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~FILE SEND END~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~#
 
@@ -314,7 +364,7 @@ def rrt_send():
         send_time_ms = time.time()
         cs.sendto(packet.encode(),(host,port))
         print("Sending packet: ",packet)
-        cs.setblocking(0)
+        # cs.setblocking(0)
 
         # MAY NEED TO USE time.process_time
         # IF WE WANT TO USE THIS COMMENTED BLOCK TO RETRY 
@@ -336,6 +386,7 @@ def rrt_send():
         rtt_dict[(LOCALHOSTNAME,LOCALPORT)][i] = totaltime
         rtt_dict_lock.release()
     time.sleep(2)
+    print("RRT PART 1 DONE")
     rtt_dict_lock.acquire()
     rtt_matrix.append(rtt_dict)
     rtt_dict_lock.release()
@@ -348,7 +399,7 @@ def rrt_send():
         rtt_dict_lock.acquire()
         cs.sendto(packet.encode(),(host,port))
         print("Sending packet: ",packet)
-        cs.setblocking(0)
+        # cs.setblocking(0)
 
         while True:
             ready = select.select([cs],[],[],0.5)
@@ -366,6 +417,7 @@ def rrt_send():
     cs.sendto("DONE".encode(), (LOCALHOSTNAME,LOCALPORT))
 
 def rtt_recv():
+    global receiver
     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ss.bind(('', LOCALPORT))
     while True:
@@ -381,8 +433,12 @@ def rtt_recv():
             print("appending", data, "to rtt_matrix\n")
             rtt_matrix.append(data)
             ss.sendto('ack'.encode(), addr)
-        elif data == check_packet('send'):
-            ss.sendto(check_packet('recv').encode(), addr)
+        elif data[:3] == check_packet('send'):
+            packet = check_packet('recv') + str(receiver)
+            ss.sendto(packet.encode(), addr)
+            data = ast.literal_eval(data[3:])
+            if data[0] != "0.0.0.0" and data[1] != -1:
+                receiver = (data[0],data[1])
         elif data[:4] == 'PEER':
             ss.sendto(str(knownlist).encode(), addr)
         elif data == 'DONE':
@@ -449,16 +505,14 @@ def rtt_calc():
     print("Calculating RTT")
     rtt()
     # converting to list of dictinoary to list of list
-    print("@@@@")
-    print(rtt_matrix)
-    rtt_matrix_list = [(key)+(val,) for dic in rtt_matrix for key,val in dic.items()]
+    rtt_matrix_list_temp = [(key)+(val,) for dic in rtt_matrix for key,val in dic.items()]
+    for x,y,z in rtt_matrix_list_temp:
+        if not any(x == a for a,b,c in rtt_matrix_list):
+            rtt_matrix_list.append((x,y,z))
     rtt_matrix_list.sort(key=lambda x : x[0])
     rtt_matrix_list = [z for x,y,z in rtt_matrix_list]
-    print(rtt_matrix_list)
-    print(len(rtt_matrix_list))
 
     make_symmetric(rtt_matrix_list)
-    print("@@@@")
 
     print("matrix in list form")
     print(rtt_matrix_list)
@@ -475,24 +529,24 @@ def offline_reset():
 
 def check_alive_send():
     global keep_alive_status
+    cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     for i,status in enumerate(keep_alive_status):
         off = False
         sendname, sendport = knownlist[i][0], knownlist[i][1]
 
-        cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         packet = 'CHECK_ALIVE'
 
 
         cs.sendto(packet.encode(),(sendname,sendport))
         print("Sending packet: ",packet)
-        cs.setblocking(0)
-        for i in range(4):
+        # cs.setblocking(0)
+        for j in range(4):
             ready = select.select([cs],[],[],1)
             if ready[0]:
                 data = cs.recv(1024)
                 break
             else:
-                if i < 3:
+                if j < 3:
                     print("\nDid not receive a response. Retrying Query.....")
                     print("Sending packet: ",packet)
                     cs.sendto(packet.encode(),(sendname,sendport))
@@ -517,19 +571,26 @@ def check_alive_send():
         knownlist_lock.release()
 
 
+
 def check_alive_recv():
     global knownlist, rtt_matrix, rtt_matrix_list
     ss = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     ss.bind(('', LOCALPORT))
+    fname = ""
+    seqNums = []
+    idk = True
     while True:
         data, addr = ss.recvfrom(1024)
         #newlist = []
         print('Recv by ', addr)
         data = data.decode()
         print('Data Recv', data)
+        print('Ringo Command: ')
         if data =='CHECK_ALIVE':
+            idk = False
             ss.sendto('ack'.encode(), addr)
         elif data[0:7] == 'RETINFO':
+            idk = False
             data = data[7:].split('and')
 
             aknownlist = ast.literal_eval(data[0].strip())
@@ -548,22 +609,112 @@ def check_alive_recv():
 
                 make_symmetric(rtt_matrix_list)
             ss.sendto('ack'.encode(), addr)
+        elif data=='DONE':
+            idk = False
+            break
 
+        res = data.split('/')
+        print(res)
+        print('data is as follows: ', str(res))
+        if len(res) > 2:
+            if res[1] not in seqNums:
+                seqNums.append(res[1])
+                if len(res) == 4:
+                    if res[0] == 'DONE' and fname == "":
+                        fname = open(res[2], "w")
+                        fname.write(res[3])
+                        print("Ringo Command: ", end="")
+                        break
+                    elif fname == "":
+                        fname = open(res[2], "w")
+                        fname.write(res[3])
+                    elif res[0] == 'DONE':
+                        fname.write(res[3])
+                        fname.close()
+                        print("Ringo Command: ", end="")
+                        break
+                else:
+                      fname.write(res[2])
+            print("@@@@@@@@@@@@")
+            ackPack = 'ack' + res[1]
+            ss.sendto(ackPack.encode(), addr)
 
-def check_alive():
-    print("CHECK IS ANYTHING DOWN OR ON THE COME UP")
+    if FLAG.lower() == 'f' and idk:
+        sendfile(fname.name)
 
-    a = Thread(target=check_alive_send)
+def commands():
+    while True:
+        com = input('Ringo Command: ').split()
+        if len(knownlist) == 0 or len(rtt_matrix) == 0:
+            print("waiting to get info back from other ringos")
+            continue
+        # check if status needs to change
+        cur_time = time.time()
+        for i,status in enumerate(keep_alive_status):
+            # print(status)
+            # print(cur_time)
+            # think its alive and wait 1 min
+            if status[0] and cur_time - status[1] > 60:
+                print("checking status")
+                check_alive_send()
+                print(keep_alive_status)
+            # think its not alive and wait 15 sec
+            elif not status[0] and cur_time - status[1] > 15:
+                print("checking status")
+                check_alive_send()
+                print(keep_alive_status)
+
+        if com[0] == 'offline': 
+            print("\nplease don't turn me off. I didn't doing anything wrong (｡-人-｡)")
+            offline_reset()
+            cs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            cs.sendto('DONE'.encode(),(LOCALHOSTNAME,LOCALPORT))
+            time.sleep(int(com[1]))
+            print("ringo back online!")
+            break
+            # offline_reset()
+            # print("lost all information. waiting to get it back")
+
+        elif com[0] == 'send':
+          #   TODO
+          # send(FLAG, LOCALPORT, POCNAME, POCPORT)
+            filename = com[1]
+            if FLAG.lower() != 's':
+                print("This ringo is not a sender: cannot send %s", filename)
+                continue
+            sendfile(filename)
+            # print('Ringo Command: ')
+            # break
+        elif com[0] == 'show-matrix':
+            print("\nMATRIX IN LIST FORM:")
+            print(rtt_matrix_list)
+        elif com[0] == 'show-ring':
+            # optimal_ring = []
+            # g = {}
+            # p = []
+            print("\nOPTIMAL RING:")
+            # tspmain()
+            print('optimal ring: {', end='')
+            for i in optimal_ring:
+                print(knownlist[i - 1], end=',')
+            print('}')
+        elif com[0] == 'disconnect':
+            exit(0)
+        else:
+            print('invalid command\n')
+            continue
+def make_thread():
+    a = Thread(target=commands)
     a.start()
     b = Thread(target=check_alive_recv)
     b.start()
-    while a.is_alive() or b.is_alive():
+    while a.is_alive() and b.is_alive():
         pass
-
+    
 if __name__ == '__main__':
-
     # PEER DISCOVERY
-    peer_discovery()
+    if len(knownlist) != N:
+        peer_discovery()    
     print("PEER DISCOVERY FINISHED, SORTED KNOWNLIST:")
     knownlist.sort(key=lambda x: x[0])
     print(knownlist)
@@ -578,56 +729,15 @@ if __name__ == '__main__':
     #RRT CALCUATION
     rtt_calc()
 
+    #TSP
+    tspmain()
+
+    #which path is shorter
+    if FLAG.lower() == 's':
+        findShortestPath()
     keep_alive_status = [[True,time.time()]] * N
     # 1 min = 60000ms
     while True:
-        com = input('Ringo Command: ').split()
-
-        # check if status needs to change
-        cur_time = time.time()
-        for i,status in enumerate(keep_alive_status):
-            # think its alive and wait 1 min
-            if status[0] and status[1] - cur_time > 60000:
-                check_alive()
-            # think its not alive and wait 15 sec
-            elif not status[0] and cur_time - status[1] > 15000:
-                check_alive()
-
-        if com[0] == 'offline': 
-            print("\nplease don't turn me off. I didn't doing anything wrong (｡-人-｡)")
-            offline_reset()
-            time.sleep(int(com[1]))
-            print("ringo back online!")
-            # offline_reset()
-            # print("lost all information. waiting to get it back")
-
-        elif com[0] == 'send':
-          #   TODO
-          # send(FLAG, LOCALPORT, POCNAME, POCPORT)
-            filename = com[1]
-            if FLAG is not 'S' or FLAG is not 's':
-                print("This ringo is not a sender: cannot send %s", filename)
-                break
-            sendfile(filename)
-            exit(0)
-        elif com[0] == 'show-matrix':
-            print("\nMATRIX IN LIST FORM:")
-            print(rtt_matrix_list)
-        elif com[0] == 'show-ring':
-            optimal_ring = []
-            g = {}
-            p = []
-            print("\nOPTIMAL RING:")
-            tspmain()
-            print('optimal ring: {', end='')
-            for i in optimal_ring:
-                print(knownlist[i - 1], end=',')
-            print('}')
-        elif com[0] == 'disconnect':
-            # PROB NEED TO CHANGE
-            exit(0)
-        else:
-            print('invalid command\n')
-            continue
+        make_thread()
 
 
